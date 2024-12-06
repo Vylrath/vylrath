@@ -172,7 +172,7 @@ wait_vblank2:
     bit PPU_STATUS   ; Test PPU status bits in memory with accumulator
     bpl wait_vblank2 ; Loop while the accumulator is positive
 
-    lda $%10001000  ; 1b - NMI enable
+    lda #%10001000  ; 1b - NMI enable
                     ; 1b - PPU master/slave select
                     ; 1b - 8x8/8x16 sprite size
                     ; 1b - Background pattern table address
