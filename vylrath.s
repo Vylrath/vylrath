@@ -1,5 +1,15 @@
 
 ; ------------------------------------------------------------------------------
+; Constant declarations
+; ------------------------------------------------------------------------------
+PPU_CONTROL = $2000        ; PPU control register 1 (write)
+PPU_MASK = $2001           ; PPU control register 2 (write)
+PPU_STATUS = $2002         ; PPU status register (read)
+PPU_SPRRAM_ADDRESS = $2003 ; PPU sprite RAM address (write)
+SPRITE_DMA = $4014         ; PPU sprite DMA (write)
+; ------------------------------------------------------------------------------
+
+; ------------------------------------------------------------------------------
 ; iNES file/header format
 ; ------------------------------------------------------------------------------
 .segment "HEADER"
@@ -56,12 +66,14 @@
 .word irq   ; Interrupt request vector
 ; ------------------------------------------------------------------------------
 
-
 ; ------------------------------------------------------------------------------
 ; Zero page memory (256b)
 ; ------------------------------------------------------------------------------
 .segment "ZEROPAGE"
 ; ------------------------------------------------------------------------------
+nmi_ready: .res 1 ; NMI flag
+                  ; Set to 1 to push a PPU frame update
+                  ; Set to 2 to turn rendering off for the next NMI
 ; ------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------
@@ -69,6 +81,7 @@
 ; ------------------------------------------------------------------------------
 .segment "OAM"
 ; ------------------------------------------------------------------------------
+oam: .res 256 ; OAM data
 ; ------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------
@@ -76,6 +89,31 @@
 ; ------------------------------------------------------------------------------
 .segment "BSS"
 ; ------------------------------------------------------------------------------
+palette: .res 32 ; PPU palette buffer
+; ------------------------------------------------------------------------------
+
+; ------------------------------------------------------------------------------
+; Main application entry point; called on startup and reset
+; ------------------------------------------------------------------------------
+.segment "CODE"
+; ------------------------------------------------------------------------------
+.proc ppu_on
+    lda #$01
+    sta nmi_ready
+    loop:
+        lda nmi_ready
+        bne loop
+    rts
+.endproc
+
+.proc ppu_off
+    lda #$02
+    sta nmi_ready
+    loop:
+        lda nmi_ready
+        bne loop
+    rts
+.endproc
 ; ------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------
@@ -84,13 +122,21 @@
 .segment "CODE"
 ; ------------------------------------------------------------------------------
 .proc reset
-    sei      ; Set interrupt disable
-    cld      ; Clear decimal mode
+    sei ; Set interrupt disable
+    cld ; Clear decimal mode
+
     ldx #$FF
     txs      ; Transfer x (255) to the stack
 
+    inx ; Wrap x back to 0
+
+    stx PPU_CONTROL ; Disable NMI
+    stx PPU_MASK    ; Disable rendering
+
+    bit PPU_STATUS ; Clear PPU status bits in memory with accumulator
+
 wait_vblank1:
-    bit $2002        ; Test PPU status bits in memory with accumulator
+    bit PPU_STATUS   ; Test PPU status bits in memory with accumulator
     bpl wait_vblank1 ; Loop while the accumulator is positive
 
     lda #$00 ; RAM initialization value (0)
@@ -109,9 +155,29 @@ clear_ram:
     inx
     bne clear_ram ; Once X is back to 0, the zero flag is set and the loop exits
 
+    lda #$FF ; Place all sprites offscreen at Y = 255
+    ldx #$00
+
+clear_oam:
+	sta oam, x
+	inx
+	inx
+	inx
+	inx
+	bne clear_oam
+
 wait_vblank2:
-    bit $2002        ; Test PPU status bits in memory with accumulator
+    bit PPU_STATUS   ; Test PPU status bits in memory with accumulator
     bpl wait_vblank2 ; Loop while the accumulator is positive
+
+    lda $%10001000  ; 1b - NMI enable
+                    ; 1b - PPU master/slave select
+                    ; 1b - 8x8/8x16 sprite size
+                    ; 1b - Background pattern table address
+                    ; 1b - Sprite pattern table address
+                    ; 1b - PPU address increment
+                    ; 2b - Name table select
+    sta PPU_CONTROL ; Enable NMI for graphical updates
 
     jmp main ; Start the main loop
 .endproc
@@ -123,6 +189,79 @@ wait_vblank2:
 .segment "CODE"
 ; ------------------------------------------------------------------------------
 .proc nmi
+    ; Save registers to stack for later restoration
+    pha ; Push accumulator to stack
+    txa ; Transfer x to accumulator
+    pha ; Push accumulator to stack
+    tya ; Transfer y to accumulator
+    pha ; Push accumulator to stack
+
+    lda nmi_ready
+    bne :+ ; If nmi_ready is not 0, skip the next instruction
+        jmp ppu_update_end ; Jump to the end of the NMI routine
+    :
+
+    cmp #$02               ; See if rendering should be turned off
+    bne cont_render
+        lda #%00000000     ; 1b - blue emphasis
+                           ; 1b - green emphasis
+                           ; 1b - red emphasis
+                           ; 1b - sprite visibility
+                           ; 1b - background visibility
+                           ; 1b - sprite clipping
+                           ; 1b - background clipping
+        sta PPU_MASK       ; Disable rendering
+        ldx #$00
+        stx nmi_ready      ; Reset NMI ready flag to 0
+        jmp ppu_update_end
+
+cont_render:
+    ldx #$00
+    stx PPU_SPRRAM_ADDRESS ; Set the sprite RAM address to 0 and use OAMDMA
+    lda #>oam              ; Load the high byte of the OAM address
+    sta SPRITE_DMA         ; Transfer the sprite data to the PPU
+
+    ; Transfer palette to PPU
+    lda #%10001000        ; 1b - NMI enable
+                          ; 1b - PPU master/slave select
+                          ; 1b - 8x8/8x16 sprite size
+                          ; 1b - Background pattern table address
+                          ; 1b - Sprite pattern table address
+                          ; 1b - PPU address increment
+                          ; 2b - Name table select
+    sta PPU_CONTROL       ; Enable NMI for graphical updates
+    lda PPU_STATUS        ; Reset the PPU address latch
+    lda #$3F              ; Set the palette address to $3F00
+    sta PPU_VRAM_ADDRESS2 ; Set the PPU address to $3F00
+    sta PPU_VRAM_ADDRESS2
+    ldx #$00
+
+loop:
+    lda palette, x  ; Load the palette data
+    sta PPU_VRAM_IO ; Transfer the palette data to the PPU
+    inx             ; Increment the palette index
+    cpx #$20        ; Check if the palette index is at the end
+    bcc loop
+
+    lda #%00011110 ; 1b - blue emphasis
+                   ; 1b - green emphasis
+                   ; 1b - red emphasis
+                   ; 1b - sprite visibility
+                   ; 1b - background visibility
+                   ; 1b - sprite clipping
+                   ; 1b - background clipping
+    sta PPU_MASK   ; Enable rendering
+    ldx #$00
+    stx nmi_ready  ; Reset NMI ready flag
+
+ppu_update_end:
+    ; Restore registers from stack
+    pla ; Pull accumulator from stack
+    tay ; Transfer accumulator to y
+    pla ; Pull accumulator from stack
+    tax ; Transfer accumulator to x
+    pla ; Pull accumulator from stack
+
     rti ; Return from interrupt
 .endproc
 ; ------------------------------------------------------------------------------
