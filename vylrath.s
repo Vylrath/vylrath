@@ -6,6 +6,8 @@ PPU_CONTROL = $2000        ; PPU control register 1 (write)
 PPU_MASK = $2001           ; PPU control register 2 (write)
 PPU_STATUS = $2002         ; PPU status register (read)
 PPU_SPRRAM_ADDRESS = $2003 ; PPU sprite RAM address (write)
+PPU_VRAM_ADDRESS2 = $2006  ; PPU VRAM address (write)
+PPU_VRAM_IO = $2007        ; PPU VRAM data (read/write)
 SPRITE_DMA = $4014         ; PPU sprite DMA (write)
 ; ------------------------------------------------------------------------------
 
@@ -97,11 +99,11 @@ palette: .res 32 ; PPU palette buffer
 ; ------------------------------------------------------------------------------
 .segment "CODE"
 ; ------------------------------------------------------------------------------
-.proc ppu_on
+.proc ppu_update
     lda #$01
     sta nmi_ready
     loop:
-        lda nmi_ready
+        lda nmi_ready ; Set to 1 to push a PPU frame update
         bne loop
     rts
 .endproc
@@ -110,7 +112,7 @@ palette: .res 32 ; PPU palette buffer
     lda #$02
     sta nmi_ready
     loop:
-        lda nmi_ready
+        lda nmi_ready ; Set to 2 to turn rendering off for the next NMI
         bne loop
     rts
 .endproc
@@ -282,14 +284,86 @@ ppu_update_end:
 .segment "CODE"
 ; ------------------------------------------------------------------------------
 .proc main
+    ldx #$00
+
+paletteloop:
+    lda default_palette, x ; Load the default palette data
+    sta palette, x         ; Transfer the default palette data to the PPU
+    inx
+    cpx #$20               ; Check if the palette index is at the end
+    bcc paletteloop
+
+    jsr clear_nametable
+
+    lda PPU_STATUS
+    lda #$20
+    sta PPU_VRAM_ADDRESS2
+    lda #$8A
+    sta PPU_VRAM_ADDRESS2
+
+    jsr ppu_update
+
 mainloop:
+    lda nmi_ready
+    cmp #$00
+    bne mainloop
+
+    lda #$01
+    sta nmi_ready
     jmp mainloop
 .endproc
 ; ------------------------------------------------------------------------------
+
+; ------------------------------------------------------------------------------
+; Clears nametable (30 rows by 32 columns)
+; ------------------------------------------------------------------------------
+.segment "CODE"
+; ------------------------------------------------------------------------------
+.proc clear_nametable
+    lda PPU_STATUS        ; Reset the PPU address latch
+    lda #$20              ; Set the PPU address to $2000
+    sta PPU_VRAM_ADDRESS2
+    lda #$00
+    sta PPU_VRAM_ADDRESS2
+
+    lda #$00
+    ldy #$1E ; Clear 30 rows
+
+    rowloop:
+        ldx #$20            ; Clear 32 columns
+        columnloop:
+            sta PPU_VRAM_IO ; Clear the nametable (960B)
+            dex
+            bne columnloop
+        dey
+        bne rowloop
+
+    ldx #$40 ; Clear the attribute table (64B)
+    loop:
+        sta PPU_VRAM_IO
+        dex
+        bne loop
+
+    rts
+.endproc
+; ------------------------------------------------------------------------------
+
 
 ; ------------------------------------------------------------------------------
 ; Read-only data
 ; ------------------------------------------------------------------------------
 .segment "RODATA"
 ; ------------------------------------------------------------------------------
+default_palette:
+; Background palette data
+.byte $0F,$00,$10,$30
+.byte $0F,$01,$21,$31
+.byte $0F,$06,$16,$26
+.byte $0F,$09,$19,$29
+
+; Sprite palette data
+.byte $0F,$00,$10,$30
+.byte $0F,$01,$21,$31
+.byte $0F,$06,$16,$26
+.byte $0F,$09,$19,$29
 ; ------------------------------------------------------------------------------
