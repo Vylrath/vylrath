@@ -1,7 +1,7 @@
 
 # Vylrath
 
-NES game written in 6502 assembler.
+NES game written in 6502 assembly.
 
 ## Documentation
 
