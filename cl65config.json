@@ -1,0 +1,5 @@
+{
+    "executable": "cl65",
+    "input": "vylrath.s",
+    "params": "-v -d -g -o vylrath.nes -Wl --dbgfile,'vylrath.dbg'"
+}
