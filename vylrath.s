@@ -235,7 +235,7 @@ cont_render:
     lda PPU_STATUS        ; Reset the PPU address latch
     lda #$3F              ; Set the palette address to $3F00
     sta PPU_VRAM_ADDRESS2 ; Set the PPU address to $3F00
-    sta PPU_VRAM_ADDRESS2
+    stx PPU_VRAM_ADDRESS2
     ldx #$00
 
 loop:
@@ -293,13 +293,24 @@ paletteloop:
     cpx #$20               ; Check if the palette index is at the end
     bcc paletteloop
 
-    jsr clear_nametable
+    jsr clear_nametable ; Clear the nametable
 
-    lda PPU_STATUS
-    lda #$20
+    ; Draw some text on the screen
+    lda PPU_STATUS        ; Reset the PPU address latch
+    lda #$20              ; Set the PPU address to $208A (row 4. col 10) 
     sta PPU_VRAM_ADDRESS2
     lda #$8A
     sta PPU_VRAM_ADDRESS2
+
+    ldx #$00
+textloop:
+    lda hello, x
+    sta PPU_VRAM_IO
+    inx
+    cmp #$00
+    beq :+
+    jmp textloop
+    :
 
     jsr ppu_update
 
@@ -366,4 +377,7 @@ default_palette:
 .byte $0F, $01, $21, $31
 .byte $0F, $06, $16, $26
 .byte $0F, $09, $19, $29
+
+hello:
+.byte 'H', 'E', 'L', 'L', 'O', ' ', 'W', 'O', 'R', 'L', 'D', #$00
 ; ------------------------------------------------------------------------------
