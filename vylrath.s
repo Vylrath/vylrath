@@ -302,26 +302,26 @@ paletteloop:
     lda #$8A
     sta PPU_VRAM_ADDRESS2
 
-    ldx #$00
+    ldx #$00 ; Start at the beginning of the text
 textloop:
-    lda hello, x
-    sta PPU_VRAM_IO
-    inx
-    cmp #$00
-    beq :+
-    jmp textloop
-    :
+    lda hello, x    ; Load the text data
+    sta PPU_VRAM_IO ; Transfer the text data to the PPU
+    inx             ; Increment the text index
+    cmp #$00        ; Check if the text is at the end
+    beq :+          ; If the text is at the end, skip the next instruction
+    jmp textloop    ; Continue drawing the text
+    :               ; End of the text
 
-    jsr ppu_update
+    jsr ppu_update  ; Push a PPU frame update
 
 mainloop:
-    lda nmi_ready
-    cmp #$00
-    bne mainloop
+    lda nmi_ready ; Check if the NMI flag is set
+    cmp #$00      ; If the NMI flag is not set, skip the next instruction
+    bne mainloop  ; Continue the main loop
 
-    lda #$01
-    sta nmi_ready
-    jmp mainloop
+    lda #$01      ; Set the NMI flag to 1
+    sta nmi_ready ; Push a PPU frame update
+    jmp mainloop  ; Continue the main loop
 .endproc
 ; ------------------------------------------------------------------------------
 
