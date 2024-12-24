@@ -10,6 +10,8 @@ PPU_VRAM_ADDRESS2 = $2006  ; PPU VRAM address (write)
 PPU_VRAM_IO = $2007        ; PPU VRAM data (read/write)
 SPRITE_DMA = $4014         ; PPU sprite DMA (write)
 
+APU_DM_CONTROL = $4010 ; APU DMC control (write)
+
 JOYPAD1 = $4016 ; Joypad 1 (read/write)
 JOYPAD2 = $4017 ; Joypad 2 (read/write)
 
@@ -161,8 +163,9 @@ palette: .res 32 ; PPU palette buffer
 
     inx ; Wrap x back to 0
 
-    stx PPU_CONTROL ; Disable NMI
-    stx PPU_MASK    ; Disable rendering
+    stx PPU_CONTROL    ; Disable NMI
+    stx PPU_MASK       ; Disable rendering
+    stx APU_DM_CONTROL ; Disable APU 
 
     bit PPU_STATUS ; Clear PPU status bits in memory with accumulator
 
@@ -340,6 +343,25 @@ textloop:
     beq :+          ; If the text is at the end, skip the next instruction
     jmp textloop    ; Continue drawing the text
     :               ; End of the text
+
+    lda #$B4              ; Set the sprite Y position
+    sta oam               ; Store the sprite Y position
+    lda #$78              ; Set the sprite X position
+    sta oam + 3           ; Store the sprite X position
+    lda #$01              ; Set the sprite tile index
+    sta oam + 1           ; Store the sprite tile index
+    lda #$00              ; Set the sprite attributes
+    sta oam + 2           ; Store the sprite attributes
+    lda #$7C              ; Set the sprite Y position
+    sta oam + (1 * 4)     ; Store the sprite Y position
+    sta oam + (1 * 4) + 3 ; Store the sprite X position
+    lda #$02              ; Set the sprite tile index
+    sta oam + (1 * 4) + 1 ; Store the sprite tile index
+    lda #$00              ; Set the sprite attributes
+    sta oam + (1 * 4) + 2 ; Store the sprite attributes
+    lda #$01              ; Set the x velocity of the ball
+    sta d_x               ; Store the x velocity of the ball
+    sta d_y               ; Store the y velocity of the ball
 
     jsr ppu_update  ; Push a PPU frame update
 
