@@ -10,7 +10,7 @@
             "name": "Debug rom with mesen",
             "romPath": "${workspaceFolder}/vylrath.nes",
             "dbgPath": "${workspaceFolder}/vylrath.dbg",
-            "program": "mesen",
+            "program": "../../_Tools/mesen/mesen",
             "sourcePath": "${workspaceFolder}/",
             "stopOnEntry": true,
             "resetOnEntry": true

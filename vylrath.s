@@ -9,6 +9,18 @@ PPU_SPRRAM_ADDRESS = $2003 ; PPU sprite RAM address (write)
 PPU_VRAM_ADDRESS2 = $2006  ; PPU VRAM address (write)
 PPU_VRAM_IO = $2007        ; PPU VRAM data (read/write)
 SPRITE_DMA = $4014         ; PPU sprite DMA (write)
+
+JOYPAD1 = $4016 ; Joypad 1 (read/write)
+JOYPAD2 = $4017 ; Joypad 2 (read/write)
+
+PAD_A = %00000001      ; Joypad A button
+PAD_B = %00000010      ; Joypad B button
+PAD_SELECT = %00000100 ; Joypad select button
+PAD_START = %00001000  ; Joypad start button
+PAD_UP = %00010000     ; Joypad up button
+PAD_DOWN = %00100000   ; Joypad down button
+PAD_LEFT = %01000000   ; Joypad left button
+PAD_RIGHT = %10000000  ; Joypad right button
 ; ------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------
@@ -76,6 +88,20 @@ SPRITE_DMA = $4014         ; PPU sprite DMA (write)
 nmi_ready: .res 1 ; NMI flag
                   ; Set to 1 to push a PPU frame update
                   ; Set to 2 to turn rendering off for the next NMI
+
+gamepad: .res 1 ; Gamepad state
+                ;   Bit 0: A button
+                ;   Bit 1: B button
+                ;   Bit 2: Select button
+                ;   Bit 3: Start button
+                ;   Bit 4: Up button
+                ;   Bit 5: Down button
+                ;   Bit 6: Left button
+                ;   Bit 7: Right button
+
+d_x: .res 1 ; x velocity of ball
+
+d_y: .res 1 ; y velocity of ball
 ; ------------------------------------------------------------------------------
 
 ; ------------------------------------------------------------------------------
@@ -127,8 +153,11 @@ palette: .res 32 ; PPU palette buffer
     sei ; Set interrupt disable
     cld ; Clear decimal mode
 
-    ldx #$FF
-    txs      ; Transfer x (255) to the stack
+    ldx #$40
+    stx JOYPAD2 ; Disable joypad 2
+
+    ldx #$FF ; Set the stack pointer to the top of the stack
+    txs      ; Transfer x to the stack pointer
 
     inx ; Wrap x back to 0
 
@@ -236,7 +265,7 @@ cont_render:
     lda #$3F              ; Set the palette address to $3F00
     sta PPU_VRAM_ADDRESS2 ; Set the PPU address to $3F00
     stx PPU_VRAM_ADDRESS2
-    ldx #$00
+    ldx #$00              ; Start at the beginning of the palette
 
 loop:
     lda palette, x  ; Load the palette data
@@ -319,11 +348,65 @@ mainloop:
     cmp #$00      ; If the NMI flag is not set, skip the next instruction
     bne mainloop  ; Continue the main loop
 
+    jsr gamepad_poll ; Poll the gamepad
+
+    lda gamepad               ; Load the gamepad state
+    and #PAD_LEFT             ; Check if the left button is pressed
+    beq NOT_GAMEPAD_LEFT      ; If the left button is not pressed, skip the next instruction
+        lda oam + 3           ; Load the sprite X position
+        cmp #$00              ; Check if the sprite is at the left edge
+        beq NOT_GAMEPAD_LEFT  ; If the sprite is at the left edge, skip the next instruction
+        sec                   ; Set the carry flag
+        sbc #$01              ; Move the sprite left
+        sta oam + 3           ; Store the sprite X position
+NOT_GAMEPAD_LEFT:             ; End of the left button check
+    lda gamepad               ; Load the gamepad state
+    and #PAD_RIGHT            ; Check if the right button is pressed
+    beq NOT_GAMEPAD_RIGHT     ; If the right button is not pressed, skip the next instruction
+        lda oam + 3           ; Load the sprite X position
+        cmp #$F8              ; Check if the sprite is at the right edge
+        beq NOT_GAMEPAD_RIGHT ; If the sprite is at the right edge, skip the next instruction
+        clc                   ; Clear the carry flag
+        adc #$01              ; Move the sprite right
+        sta oam + 3           ; Store the sprite X position
+NOT_GAMEPAD_RIGHT:            ; End of the right button check
+    lda oam + (1 * 4) + 0     ; Load the sprite Y position
+    clc                       ; Clear the carry flag
+    adc d_y                   ; Move the sprite down
+    sta oam + (1 * 4) + 0     ; Store the sprite Y position
+    cmp #$00                  ; Check if the sprite is at the top edge
+    bne NOT_HITTOP            ; If the sprite is not at the top edge, skip the next instruction
+        lda #$01              ; Reverse direction
+        sta d_y               ; Store the sprite Y position
+NOT_HITTOP:                   ; End of the top edge check
+    lda oam + (1 * 4) + 0     ; Load the sprite Y position
+    cmp #$D2                  ; Check if the sprite is at the bottom edge
+    bne NOT_HITBOTTOM         ; If the sprite is not at the bottom edge, skip the next instruction
+        lda #$FF              ; Reverse direction
+        sta d_y               ; Store the sprite Y position
+NOT_HITBOTTOM:                ; End of the bottom edge check
+    lda oam + (1 * 4) + 3     ; Load the sprite tile index
+    clc                       ; Clear the carry flag
+    adc d_x                   ; Move the sprite right
+    sta oam + (1 * 4) + 3     ; Store the sprite tile index
+    cmp #$00                  ; Check if the sprite is at the left edge
+    bne NOT_HITLEFT           ; If the sprite is not at the left edge, skip the next instruction
+        lda #$01              ; Reverse direction
+        sta d_x               ; Store the sprite tile index
+NOT_HITLEFT:
+    lda oam + (1 * 4) + 3     ; Load the sprite tile index
+    cmp #$F8                  ; Check if the sprite is at the right edge
+    bne NOT_HITRIGHT          ; If the sprite is not at the right edge, skip the next instruction
+        lda #$FF              ; Reverse direction
+        sta d_x               ; Store the sprite tile index
+NOT_HITRIGHT:
+
     lda #$01      ; Set the NMI flag to 1
     sta nmi_ready ; Push a PPU frame update
     jmp mainloop  ; Continue the main loop
 .endproc
 ; ------------------------------------------------------------------------------
+
 
 ; ------------------------------------------------------------------------------
 ; Clears nametable (30 rows by 32 columns)
@@ -361,6 +444,33 @@ mainloop:
 
 
 ; ------------------------------------------------------------------------------
+; Poll the game pad and store the state in the gamepad variable
+; ------------------------------------------------------------------------------
+.segment "CODE"
+; ------------------------------------------------------------------------------
+.proc gamepad_poll
+    lda #$01
+    sta JOYPAD1 ; Strobe the joypad 1 register
+    lda #$00
+    sta JOYPAD1 ; Reset the joypad 1 register
+    ldx #$08    ; Start at the first button
+
+loop:
+    pha            ; Push the accumulator to the stack
+    lda JOYPAD1    ; Load the joypad 1 register
+    and #%00000011 ; Combine low two bits and store in carry bit
+    cmp #%00000001
+    pla            ; Restore the accumulator
+    ror            ; Rotate the carry bit into the accumulator
+    dex
+    bne loop
+    sta gamepad    ; Store the gamepad state
+    rts
+.endproc
+; ------------------------------------------------------------------------------
+
+
+; ------------------------------------------------------------------------------
 ; Read-only data
 ; ------------------------------------------------------------------------------
 .segment "RODATA"
@@ -379,5 +489,5 @@ default_palette:
 .byte $0F, $09, $19, $29
 
 hello:
-.byte 'H', 'E', 'L', 'L', 'O', ' ', 'W', 'O', 'R', 'L', 'D', #$00
+.byte 'H', 'E', 'L', 'L', 'O', ' ', 'W', 'O', 'R', 'L', 'D', $00
 ; ------------------------------------------------------------------------------
