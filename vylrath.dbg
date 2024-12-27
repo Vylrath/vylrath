@@ -1,6 +1,6 @@
 version	major=2,minor=0
 info	csym=0,file=627,lib=0,line=309,mod=1,scope=9,seg=10,span=259,sym=57,type=4
-file	id=0,name="\\synology\home\Development\NES\Games\Vylrath\vylrath.s",size=21413,mtime=0x676AADA7,mod=0
+file	id=0,name="z:\Development\NES\Games\Vylrath\vylrath.s",size=21245,mtime=0x676AFF00,mod=0
 file	id=1,name="vylrath.chr",size=8192,mtime=0x666BE2F4,mod=0
 line	id=0,file=0,line=204,span=71
 line	id=1,file=0,line=343,span=137

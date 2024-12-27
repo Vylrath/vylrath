@@ -374,20 +374,20 @@ mainloop:
 
     lda gamepad               ; Load the gamepad state
     and #PAD_LEFT             ; Check if the left button is pressed
-    beq NOT_GAMEPAD_LEFT      ; If the left button is not pressed, skip the next instruction
+    beq NOT_GAMEPAD_LEFT      ; If the left button is not pressed, skip
         lda oam + 3           ; Load the sprite X position
         cmp #$00              ; Check if the sprite is at the left edge
-        beq NOT_GAMEPAD_LEFT  ; If the sprite is at the left edge, skip the next instruction
+        beq NOT_GAMEPAD_LEFT  ; If the sprite is at the left edge, skip
         sec                   ; Set the carry flag
         sbc #$01              ; Move the sprite left
         sta oam + 3           ; Store the sprite X position
 NOT_GAMEPAD_LEFT:             ; End of the left button check
     lda gamepad               ; Load the gamepad state
     and #PAD_RIGHT            ; Check if the right button is pressed
-    beq NOT_GAMEPAD_RIGHT     ; If the right button is not pressed, skip the next instruction
+    beq NOT_GAMEPAD_RIGHT     ; If the right button is not pressed, skip
         lda oam + 3           ; Load the sprite X position
         cmp #$F8              ; Check if the sprite is at the right edge
-        beq NOT_GAMEPAD_RIGHT ; If the sprite is at the right edge, skip the next instruction
+        beq NOT_GAMEPAD_RIGHT ; If the sprite is at the right edge, skip
         clc                   ; Clear the carry flag
         adc #$01              ; Move the sprite right
         sta oam + 3           ; Store the sprite X position
@@ -397,13 +397,13 @@ NOT_GAMEPAD_RIGHT:            ; End of the right button check
     adc d_y                   ; Move the sprite down
     sta oam + (1 * 4) + 0     ; Store the sprite Y position
     cmp #$00                  ; Check if the sprite is at the top edge
-    bne NOT_HITTOP            ; If the sprite is not at the top edge, skip the next instruction
+    bne NOT_HITTOP            ; If the sprite is not at the top edge, skip
         lda #$01              ; Reverse direction
         sta d_y               ; Store the sprite Y position
 NOT_HITTOP:                   ; End of the top edge check
     lda oam + (1 * 4) + 0     ; Load the sprite Y position
     cmp #$D2                  ; Check if the sprite is at the bottom edge
-    bne NOT_HITBOTTOM         ; If the sprite is not at the bottom edge, skip the next instruction
+    bne NOT_HITBOTTOM         ; If the sprite is not at the bottom edge, skip
         lda #$FF              ; Reverse direction
         sta d_y               ; Store the sprite Y position
 NOT_HITBOTTOM:                ; End of the bottom edge check
@@ -412,13 +412,13 @@ NOT_HITBOTTOM:                ; End of the bottom edge check
     adc d_x                   ; Move the sprite right
     sta oam + (1 * 4) + 3     ; Store the sprite tile index
     cmp #$00                  ; Check if the sprite is at the left edge
-    bne NOT_HITLEFT           ; If the sprite is not at the left edge, skip the next instruction
+    bne NOT_HITLEFT           ; If the sprite is not at the left edge, skip
         lda #$01              ; Reverse direction
         sta d_x               ; Store the sprite tile index
 NOT_HITLEFT:
     lda oam + (1 * 4) + 3     ; Load the sprite tile index
     cmp #$F8                  ; Check if the sprite is at the right edge
-    bne NOT_HITRIGHT          ; If the sprite is not at the right edge, skip the next instruction
+    bne NOT_HITRIGHT          ; If the sprite is not at the right edge, skip
         lda #$FF              ; Reverse direction
         sta d_x               ; Store the sprite tile index
 NOT_HITRIGHT:
